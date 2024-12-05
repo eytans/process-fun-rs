@@ -1,0 +1,17 @@
+[package]
+name = "process-fun-macro"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+process-fun-core = { path = "../process-fun-core" }
+syn = { workspace = true, features = ["full"] }
+quote = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+inventory = "0.3"
+proc-macro2 = "1.0"
+prettyplease = "0.2.25"
