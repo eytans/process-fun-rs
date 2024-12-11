@@ -36,7 +36,4 @@ jobs:
       
       - name: Run examples
         run: |
-          for example in examples/*.rs; do
-            echo "Running $example"
-            cargo run --example $(basename $example .rs)
-          done
+            for file in process-fun/examples/*; do cargo run --example "$(basename $file .rs)"; done
