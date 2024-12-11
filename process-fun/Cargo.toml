@@ -3,7 +3,6 @@ name = "process-fun"
 version = "0.1.0"
 edition = "2021"
 
-
 [features]
 test-debug = ["process-fun-macro/test-nocapture", "debug"]
 debug = ["process-fun-macro/debug"]
@@ -13,16 +12,13 @@ process-fun-core = { path = "../process-fun-core" }
 process-fun-macro = { path = "../process-fun-macro" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tokio = { workspace = true }
-process-wrap = { workspace = true }
-futures = "0.3"
 thiserror = { workspace = true }
 log = "0.4"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 quote = { workspace = true }
 inventory = "0.3"
 interprocess = "2.2.2"
+nix = { version = "0.29", features = ["process"] }
 
 [dev-dependencies]
 tempfile = "3.10"
-tokio-test = "0.4"
