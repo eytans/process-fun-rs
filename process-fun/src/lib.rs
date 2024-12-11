@@ -30,7 +30,7 @@
 //! use process_fun::process;
 //! use serde::{Serialize, Deserialize};
 //!
-//! #[derive(Serialize, Deserialize, Debug)]
+//! #[derive(Serialize, Deserialize, Debug, Clone)]
 //! struct Point {
 //!     x: i32,
 //!     y: i32,
@@ -46,8 +46,6 @@
 //!
 //! fn main() {
 //!     // Initialize the process-fun runtime
-//!     process_fun::init_process_fun!();
-//!     
 //!     let p1 = Point { x: 1, y: 2 };
 //!     let p2 = Point { x: 3, y: 4 };
 //!     
@@ -61,6 +59,9 @@
 //!     assert_eq!(result1.y, result2.y);
 //! }
 //! ```
+
+#[allow(unused)]
+use serde::{Deserialize, Serialize};
 
 pub use process_fun_macro::process;
 

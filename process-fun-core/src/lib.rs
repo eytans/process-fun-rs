@@ -6,8 +6,9 @@
 //! This crate is not meant to be used directly - instead, use the `process-fun` crate
 //! which provides a more ergonomic API.
 
-use interprocess::unnamed_pipe::{pipe, Recver, Sender};
-use nix::unistd::{fork, ForkResult};
+use interprocess::unnamed_pipe::{Recver, Sender};
+use nix::fcntl::OFlag;
+use nix::unistd::{fork, pipe2, ForkResult};
 use std::io::prelude::*;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -17,8 +18,13 @@ pub fn create_pipes() -> Result<(Recver, Sender), ProcessFunError> {
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Creating communication pipes");
 
-    let (sender, recver) = pipe()
+    // Create pipe with O_CLOEXEC flag
+    let (read_fd, write_fd) = pipe2(OFlag::O_CLOEXEC)
         .map_err(|e| ProcessFunError::ProcessError(format!("Failed to create pipe: {}", e)))?;
+
+    // Convert raw file descriptors to Sender/Recver
+    let recver = Recver::from(read_fd);
+    let sender = Sender::from(write_fd);
 
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Pipes created successfully");
@@ -33,11 +39,10 @@ pub fn write_to_pipe(mut fd: Sender, data: &[u8]) -> Result<(), ProcessFunError>
 
     fd.write_all(data)
         .map_err(|e| ProcessFunError::ProcessError(format!("Failed to write to pipe: {}", e)))?;
-    // Explicitly flush and drop the sender to close the write end
-    fd.flush()?;
-
+    
+    // Let the pipe be automatically flushed and closed when dropped
     #[cfg(feature = "debug")]
-    eprintln!("[process-fun-debug] Successfully wrote and flushed data to pipe");
+    eprintln!("[process-fun-debug] Successfully wrote data to pipe");
 
     Ok(())
 }

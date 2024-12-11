@@ -23,30 +23,6 @@ use syn::{parse_macro_input, ItemFn, Visibility};
 /// * Have arguments and return type that implement `Serialize` and `Deserialize`
 /// * Not take `self` parameters
 ///
-/// # Example
-///
-/// ```rust
-/// use process_fun::process;
-/// use serde::{Serialize, Deserialize};
-///
-/// #[derive(Serialize, Deserialize)]
-/// struct Point {
-///     x: i32,
-///     y: i32,
-/// }
-///
-/// #[process]
-/// pub fn add_points(p1: Point, p2: Point) -> Point {
-///     Point {
-///         x: p1.x + p2.x,
-///         y: p1.y + p2.y,
-///     }
-/// }
-///
-/// // Now you can use either:
-/// // add_points(p1, p2)           // runs in the current process
-/// // add_points_process(p1, p2)   // runs in a separate process
-/// ```
 #[proc_macro_attribute]
 pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
@@ -103,70 +79,65 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let args_tuple = quote! { (#(#arg_names),*) };
     let args_types_tuple = quote! { (#(#arg_types),*) };
     let fn_name_str = fn_name.to_string();
 
-    let debug_prints = quote! {
-        #[cfg(feature = "debug")]
-        {
-            eprintln!("[process-fun-debug] Processing function: {}", #fn_name_str);
-            eprintln!("[process-fun-debug] Arguments tuple type: {}", stringify!(#args_types_tuple));
-            eprintln!("[process-fun-debug] Arguments: {:?}", #args_tuple);
-        }
-    };
-
     let expanded = quote! {
-        use process_fun_core::ProcessFunError;
-        use nix::unistd::ForkResult;
-
         #input_fn
 
         #[allow(non_snake_case)]
-        pub fn #process_fn_name(#fn_args) -> Result<#fn_output, ProcessFunError> {
+        pub fn #process_fn_name(#fn_args) -> Result<#fn_output, process_fun_core::ProcessFunError> {
+            use nix::unistd::ForkResult;
             use serde_json;
 
             // Create pipe for result communication
-            let (mut read_pipe, write_pipe) = process_fun_core::create_pipes()?;
+            eprintln!("[process-fun-debug] Creating pipes for process function: {}", #fn_name_str);
+            let (mut read_pipe, mut write_pipe) = process_fun_core::create_pipes()?;
 
             // Fork the process
+            eprintln!("[process-fun-debug] Forking process for function: {}", #fn_name_str);
             match process_fun_core::fork_process()? {
                 ForkResult::Parent { .. } => {
-                    // Parent process
-                    drop(write_pipe);
+                    // Parent process - close write end immediately
+                    std::mem::drop(write_pipe);
 
                     #[cfg(feature = "debug")]
                     eprintln!("[process-fun-debug] Parent process waiting for result...");
 
                     // Read result from pipe
                     let result_bytes = process_fun_core::read_from_pipe(&mut read_pipe)?;
-                    drop(read_pipe);
+
+                    // Close read end after reading
+                    std::mem::drop(read_pipe);
 
                     let result: #fn_output = serde_json::from_slice(&result_bytes)?;
 
                     #[cfg(feature = "debug")]
-                    eprintln!("[process-fun-debug] Parent received result: {:?}", result);
+                    eprintln!("[process-fun-debug] Parent received result: {:?}", &result);
 
                     Ok(result)
                 }
                 ForkResult::Child => {
-                    // Child process
-                    drop(read_pipe);
+                    // Child process - close read end immediately
+                    std::mem::drop(read_pipe);
 
                     #[cfg(feature = "debug")]
                     eprintln!("[process-fun-debug] Child process started");
 
-                    #debug_prints
+                    #[cfg(feature = "debug")]
+                    {
+                        eprintln!("[process-fun-debug] Processing function: {}", &#fn_name_str);
+                        eprintln!("[process-fun-debug] Arguments tuple type: {}", stringify!(#args_types_tuple));
+                    }
 
                     // Execute the function with the original arguments
                     let result = #fn_name(#(#arg_names),*);
 
-                    // Write result back to parent
-                    let result_json = serde_json::to_string(&result)?;
-
                     #[cfg(feature = "debug")]
-                    eprintln!("[process-fun-debug] Child process result: {:?}", result);
+                    eprintln!("[process-fun-debug] Child process result: {:?}", &result);
 
+                    // Serialize and write result
+                    let result_json = serde_json::to_string(&result)?;
                     process_fun_core::write_to_pipe(write_pipe, result_json.as_bytes())?;
 
                     #[cfg(feature = "debug")]
