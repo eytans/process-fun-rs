@@ -1,40 +1,40 @@
 //! # process-fun-macro
-//! 
+//!
 //! Procedural macros for the process-fun library. This crate provides the implementation
 //! of the `#[process]` attribute macro.
-//! 
+//!
 //! This crate is not meant to be used directly - instead, use the `process-fun` crate
 //! which re-exports these macros in a more convenient way.
 
 use proc_macro::TokenStream;
-use quote::{quote, format_ident};
+use quote::{format_ident, quote};
 use syn::{parse_macro_input, ItemFn, Visibility};
 
 /// Attribute macro that creates an additional version of a function that executes in a separate process.
-/// 
+///
 /// When applied to a function named `foo`, this macro:
 /// 1. Keeps the original function unchanged, allowing normal in-process calls
 /// 2. Creates a new function named `foo_process` that executes in a separate process using fork
-/// 
+///
 /// # Requirements
-/// 
+///
 /// The function must:
 /// * Be public (`pub`)
 /// * Have arguments and return type that implement `Serialize` and `Deserialize`
 /// * Not take `self` parameters
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// use process_fun::process;
 /// use serde::{Serialize, Deserialize};
-/// 
+///
 /// #[derive(Serialize, Deserialize)]
 /// struct Point {
 ///     x: i32,
 ///     y: i32,
 /// }
-/// 
+///
 /// #[process]
 /// pub fn add_points(p1: Point, p2: Point) -> Point {
 ///     Point {
@@ -42,7 +42,7 @@ use syn::{parse_macro_input, ItemFn, Visibility};
 ///         y: p1.y + p2.y,
 ///     }
 /// }
-/// 
+///
 /// // Now you can use either:
 /// // add_points(p1, p2)           // runs in the current process
 /// // add_points_process(p1, p2)   // runs in a separate process
@@ -50,33 +50,36 @@ use syn::{parse_macro_input, ItemFn, Visibility};
 #[proc_macro_attribute]
 pub fn process(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
-    
+
     // Check for duplicate process attributes
-    let process_attrs: Vec<_> = input_fn.attrs.iter()
+    let process_attrs: Vec<_> = input_fn
+        .attrs
+        .iter()
         .filter(|attr| attr.path().is_ident("process"))
         .collect();
-    
+
     if process_attrs.len() > 1 {
         panic!("#[process] can only be used once per function");
     }
 
     // Ensure the function is public
     match input_fn.vis {
-        Visibility::Public(_) => {},
+        Visibility::Public(_) => {}
         _ => panic!("#[process] can only be used on public functions"),
     }
 
     let fn_name = &input_fn.sig.ident;
     let process_fn_name = format_ident!("{}_process", fn_name);
-    
+
     let fn_args = &input_fn.sig.inputs;
     let fn_output = match &input_fn.sig.output {
         syn::ReturnType::Default => quote!(()),
         syn::ReturnType::Type(_, ty) => quote!(#ty),
     };
-    
-    let arg_names: Vec<_> = fn_args.iter().map(|arg| {
-        match arg {
+
+    let arg_names: Vec<_> = fn_args
+        .iter()
+        .map(|arg| match arg {
             syn::FnArg::Typed(pat_type) => {
                 if let syn::Pat::Ident(pat_ident) = &*pat_type.pat {
                     &pat_ident.ident
@@ -87,19 +90,18 @@ pub fn process(attr: TokenStream, item: TokenStream) -> TokenStream {
             syn::FnArg::Receiver(_) => {
                 panic!("Self arguments not supported")
             }
-        }
-    }).collect();
+        })
+        .collect();
 
-    let arg_types: Vec<_> = fn_args.iter().map(|arg| {
-        match arg {
-            syn::FnArg::Typed(pat_type) => {
-                pat_type.ty.clone()
-            }
+    let arg_types: Vec<_> = fn_args
+        .iter()
+        .map(|arg| match arg {
+            syn::FnArg::Typed(pat_type) => pat_type.ty.clone(),
             syn::FnArg::Receiver(_) => {
                 panic!("Self arguments not supported")
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let args_tuple = quote! { (#(#arg_names),*) };
     let args_types_tuple = quote! { (#(#arg_types),*) };
@@ -123,10 +125,10 @@ pub fn process(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[allow(non_snake_case)]
         pub fn #process_fn_name(#fn_args) -> Result<#fn_output, ProcessFunError> {
             use serde_json;
-            
+
             // Create pipe for result communication
             let (mut read_pipe, write_pipe) = process_fun_core::create_pipes()?;
-            
+
             // Fork the process
             match process_fun_core::fork_process()? {
                 ForkResult::Parent { .. } => {

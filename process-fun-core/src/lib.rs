@@ -1,16 +1,16 @@
 //! # process-fun-core
-//! 
+//!
 //! Core functionality for the process-fun library. This crate provides the fundamental types
 //! and functions needed to support out-of-process function execution.
-//! 
+//!
 //! This crate is not meant to be used directly - instead, use the `process-fun` crate
 //! which provides a more ergonomic API.
 
+use interprocess::unnamed_pipe::{pipe, Recver, Sender};
+use nix::unistd::{fork, ForkResult};
+use std::io::prelude::*;
 use std::path::PathBuf;
 use thiserror::Error;
-use std::io::prelude::*;
-use interprocess::unnamed_pipe::{pipe, Sender, Recver};
-use nix::unistd::{fork, ForkResult};
 
 /// Create a pipe for communication between parent and child processes
 pub fn create_pipes() -> Result<(Recver, Sender), ProcessFunError> {
@@ -31,7 +31,8 @@ pub fn write_to_pipe(mut fd: Sender, data: &[u8]) -> Result<(), ProcessFunError>
 /// Read data from a pipe
 pub fn read_from_pipe(fd: &mut Recver) -> Result<Vec<u8>, ProcessFunError> {
     let mut buffer = vec![];
-    let _bytes_read = fd.read_to_end(&mut buffer)
+    let _bytes_read = fd
+        .read_to_end(&mut buffer)
         .map_err(|e| ProcessFunError::ProcessError(format!("Failed to read from pipe: {}", e)))?;
     Ok(buffer)
 }
@@ -52,16 +53,12 @@ pub enum ProcessFunError {
     /// Multiple #[process] attributes were found on a single function.
     /// Only one #[process] attribute is allowed per function.
     #[error("Multiple #[process] attributes found for function '{fun}'")]
-    MultipleTags {
-        fun: FunId,
-    },
+    MultipleTags { fun: FunId },
 
     /// The #[process] attribute was used on an invalid item type.
     /// It can only be used on function definitions.
     #[error("Expected #[process] attribute only on function with implementation but found '{item_text}'")]
-    BadItemType {
-        item_text: String
-    },
+    BadItemType { item_text: String },
 
     /// An I/O error occurred during process execution or file operations
     #[error("Failed to read or write file: {0}")]
