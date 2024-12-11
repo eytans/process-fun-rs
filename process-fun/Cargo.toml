@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-test-debug = ["process-fun-macro/test-nocapture", "debug"]
-debug = ["process-fun-macro/debug"]
+debug = [
+    "process-fun-macro/debug",
+    "process-fun-core/debug"
+]
 
 [dependencies]
 process-fun-core = { path = "../process-fun-core" }

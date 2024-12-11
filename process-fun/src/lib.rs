@@ -62,8 +62,6 @@
 //! }
 //! ```
 
-use serde::{Deserialize, Serialize};
-
 pub use process_fun_macro::process;
 
 /// Initialize the process-fun runtime. This should be called at the start of your main function.

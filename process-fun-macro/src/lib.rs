@@ -48,7 +48,7 @@ use syn::{parse_macro_input, ItemFn, Visibility};
 /// // add_points_process(p1, p2)   // runs in a separate process
 /// ```
 #[proc_macro_attribute]
-pub fn process(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
 
     // Check for duplicate process attributes
@@ -112,7 +112,7 @@ pub fn process(attr: TokenStream, item: TokenStream) -> TokenStream {
         {
             eprintln!("[process-fun-debug] Processing function: {}", #fn_name_str);
             eprintln!("[process-fun-debug] Arguments tuple type: {}", stringify!(#args_types_tuple));
-            eprintln!("[process-fun-debug] Serialized arguments: {}", args_json);
+            eprintln!("[process-fun-debug] Arguments: {:?}", #args_tuple);
         }
     };
 
@@ -156,11 +156,17 @@ pub fn process(attr: TokenStream, item: TokenStream) -> TokenStream {
                     #[cfg(feature = "debug")]
                     eprintln!("[process-fun-debug] Child process started");
 
+                    #debug_prints
+
                     // Execute the function with the original arguments
                     let result = #fn_name(#(#arg_names),*);
 
                     // Write result back to parent
                     let result_json = serde_json::to_string(&result)?;
+
+                    #[cfg(feature = "debug")]
+                    eprintln!("[process-fun-debug] Child process result: {:?}", result);
+
                     process_fun_core::write_to_pipe(write_pipe, result_json.as_bytes())?;
 
                     #[cfg(feature = "debug")]

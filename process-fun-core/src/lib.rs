@@ -14,34 +14,76 @@ use thiserror::Error;
 
 /// Create a pipe for communication between parent and child processes
 pub fn create_pipes() -> Result<(Recver, Sender), ProcessFunError> {
+    #[cfg(feature = "debug")]
+    eprintln!("[process-fun-debug] Creating communication pipes");
+
     let (sender, recver) = pipe()
         .map_err(|e| ProcessFunError::ProcessError(format!("Failed to create pipe: {}", e)))?;
+
+    #[cfg(feature = "debug")]
+    eprintln!("[process-fun-debug] Pipes created successfully");
+
     Ok((recver, sender))
 }
 
 /// Write data to a pipe and close it
 pub fn write_to_pipe(mut fd: Sender, data: &[u8]) -> Result<(), ProcessFunError> {
+    #[cfg(feature = "debug")]
+    eprintln!("[process-fun-debug] Writing {} bytes to pipe", data.len());
+
     fd.write_all(data)
         .map_err(|e| ProcessFunError::ProcessError(format!("Failed to write to pipe: {}", e)))?;
     // Explicitly flush and drop the sender to close the write end
     fd.flush()?;
+
+    #[cfg(feature = "debug")]
+    eprintln!("[process-fun-debug] Successfully wrote and flushed data to pipe");
+
     Ok(())
 }
 
 /// Read data from a pipe
 pub fn read_from_pipe(fd: &mut Recver) -> Result<Vec<u8>, ProcessFunError> {
+    #[cfg(feature = "debug")]
+    eprintln!("[process-fun-debug] Starting to read from pipe");
+
     let mut buffer = vec![];
-    let _bytes_read = fd
+    #[allow(unused_variables)]
+    let bytes_read = fd
         .read_to_end(&mut buffer)
         .map_err(|e| ProcessFunError::ProcessError(format!("Failed to read from pipe: {}", e)))?;
+
+    #[cfg(feature = "debug")]
+    eprintln!("[process-fun-debug] Read {} bytes from pipe", bytes_read);
+
     Ok(buffer)
 }
 
 /// Fork the current process and return ForkResult
 pub fn fork_process() -> Result<ForkResult, ProcessFunError> {
-    unsafe {
+    #[cfg(feature = "debug")]
+    eprintln!("[process-fun-debug] Forking process");
+
+    let result = unsafe {
         fork().map_err(|e| ProcessFunError::ProcessError(format!("Failed to fork process: {}", e)))
+    };
+
+    #[cfg(feature = "debug")]
+    if let Ok(fork_result) = &result {
+        match fork_result {
+            ForkResult::Parent { child } => {
+                eprintln!(
+                    "[process-fun-debug] Fork successful - parent process, child pid: {}",
+                    child
+                );
+            }
+            ForkResult::Child => {
+                eprintln!("[process-fun-debug] Fork successful - child process");
+            }
+        }
     }
+
+    result
 }
 
 /// Type alias for function identifiers, represented as filesystem paths

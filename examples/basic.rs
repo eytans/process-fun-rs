@@ -27,17 +27,22 @@ fn main() {
     // Initialize process-fun
     process_fun::init_process_fun!();
 
+    println!("Running examples with debug prints enabled...\n");
+
     // Basic distance calculation example
     let p1 = Point { x: 0, y: 0 };
     let p2 = Point { x: 3, y: 4 };
 
+    println!("Calculating distance between {:?} and {:?}...", p1, p2);
     match calculate_distance_process(p1.clone(), p2.clone()) {
         Ok(distance) => println!("Distance: {}", distance), // Should print: Distance: 5.0
         Err(e) => eprintln!("Error: {}", e),
     }
+    println!();
 
     // Mutable data example
     let original = Point { x: 10, y: 20 };
+    println!("Moving point with mutable data example:");
     println!("Original point: {:?}", original);
 
     // Move point in separate process
