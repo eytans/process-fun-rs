@@ -11,3 +11,10 @@ quote = { workspace = true }
 inventory = "0.3"
 once_cell = "1.18"
 thiserror = { workspace = true }
+interprocess = "2.2.2"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }

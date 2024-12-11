@@ -1,116 +1,86 @@
-# process-fun
+# process-fun-rs
 
-A Rust library for easily running functions in separate processes with seamless serialization.
+A Rust library for easily running functions in separate processes with minimal boilerplate.
+
+Docs are AI generated, thanks Cline! (Please do open issue if you find any mistakes)
+
+## Overview
+
+`process-fun-rs` provides a simple macro-based approach to execute Rust functions in separate processes. It handles all the complexity of process spawning, argument serialization, and result communication, allowing you to focus on your business logic.
 
 ## Features
 
-- Simple `#[process]` attribute macro to mark functions for process execution
-- Automatic serialization of arguments and return values
+- Simple `#[process]` attribute macro for marking functions to create an additional version that runs in separate processes
+- Automatic serialization/deserialization of function arguments and return values
 - Type-safe process communication
-- Async support out of the box
+- Error handling with custom error types
+- Debug mode for troubleshooting process execution
 
 ## Usage
 
-Add to your `Cargo.toml`:
+Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-process-fun = "0.1"
+process-fun = "0.1.0"
 ```
 
-### Basic Example
+Basic example:
 
 ```rust
 use process_fun::process;
 use serde::{Serialize, Deserialize};
 
-// Mark your data types with Serialize and Deserialize
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Point {
     x: i32,
     y: i32,
 }
 
-// Mark the function you want to run in a separate process
 #[process]
-fn calculate_distance(p1: Point, p2: Point) -> f64 {
-    let dx = (p2.x - p1.x) as f64;
-    let dy = (p2.y - p1.y) as f64;
-    (dx * dx + dy * dy).sqrt()
+pub fn add_points(p1: Point, p2: Point) -> Point {
+    Point {
+        x: p1.x + p2.x,
+        y: p1.y + p2.y,
+    }
 }
 
-#[tokio::main]
-async fn main() {
-    // Initialize process-fun
+fn main() {
+    // Initialize the process-fun runtime
     process_fun::init_process_fun!();
-
-    // Create some test points
-    let p1 = Point { x: 0, y: 0 };
+    
+    let p1 = Point { x: 1, y: 2 };
     let p2 = Point { x: 3, y: 4 };
-
-    // Call the async version of the function
-    let distance = calculate_distance_async(p1, p2).await.unwrap();
-    println!("Distance: {}", distance); // Output: Distance: 5.0
+    
+    // This will execute in a separate process
+    let result = add_points_process(p1, p2).unwrap();
+    assert_eq!(result.x, 4);
+    assert_eq!(result.y, 6);
 }
 ```
 
-### How it Works
+## How It Works
 
-1. The `#[process]` attribute generates an async version of your function with `_async` suffix
-2. When you call the async version, it:
-   - Serializes the arguments
+1. The `#[process]` attribute macro generates a wrapper function with `_process` suffix
+2. When called, the wrapper function:
+   - Serializes the arguments to JSON
    - Spawns a new process with the current executable
-   - Passes the function identifier and serialized arguments
-   - Deserializes the result
+   - Passes a unique function hash and serialized arguments
+   - Deserializes and returns the result
 
-### Important Notes
+## Crate Structure
 
-- All types used in process functions must implement `Serialize` and `Deserialize`
-- The `init_process_fun!()` macro must be called at the start of your main function
-- Functions marked with `#[process]` cannot use references or complex types that don't implement `Serialize`/`Deserialize`
+- `process-fun`: Main crate providing the public API
+- `process-fun-core`: Core functionality and types
+- `process-fun-macro`: Implementation of the `#[process]` attribute macro
 
-## Advanced Usage
+## Requirements
 
-### Error Handling
-
-The async versions of process functions return `Result<T, std::io::Error>`:
-
-```rust
-#[process]
-fn might_fail(x: i32) -> Result<i32, String> {
-    if x < 0 {
-        Err("negative numbers not allowed".to_string())
-    } else {
-        Ok(x * 2)
-    }
-}
-
-async fn example() {
-    match might_fail_async(-1).await {
-        Ok(result) => println!("Success: {}", result),
-        Err(e) => println!("Failed: {}", e),
-    }
-}
-```
-
-### Custom Types
-
-Make sure your custom types implement the necessary traits:
-
-```rust
-#[derive(Serialize, Deserialize)]
-struct ComplexData {
-    values: Vec<f64>,
-    metadata: HashMap<String, String>,
-}
-
-#[process]
-fn process_data(data: ComplexData) -> ComplexData {
-    // Process the data in a separate process
-    // ...
-}
-```
+- Functions marked with `#[process]` must:
+  - Be public (`pub`)
+  - Have arguments and return types that implement `Serialize` and `Deserialize`
+  - Not take `self` parameters
 
 ## License
 
-MIT License
+This project is licensed under the Apache 2 License - see the [LICENSE](LICENSE) file for details.

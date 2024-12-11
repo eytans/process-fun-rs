@@ -3,6 +3,11 @@ name = "process-fun"
 version = "0.1.0"
 edition = "2021"
 
+
+[features]
+test-debug = ["process-fun-macro/test-nocapture", "debug"]
+debug = ["process-fun-macro/debug"]
+
 [dependencies]
 process-fun-core = { path = "../process-fun-core" }
 process-fun-macro = { path = "../process-fun-macro" }
@@ -16,6 +21,7 @@ log = "0.4"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 quote = { workspace = true }
 inventory = "0.3"
+interprocess = "2.2.2"
 
 [dev-dependencies]
 tempfile = "3.10"

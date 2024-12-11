@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 proc-macro = true
 
+[features]
+debug = []
+test-nocapture = []
+
 [dependencies]
 process-fun-core = { path = "../process-fun-core" }
 syn = { workspace = true, features = ["full"] }
