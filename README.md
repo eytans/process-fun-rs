@@ -13,7 +13,7 @@ A Rust library for easily running functions in separate processes with minimal b
 ## Features
 
 - Simple `#[process]` attribute macro for marking functions to create an additional version that runs in separate processes
-- Automatic serialization/deserialization of function arguments and return values
+- Automatic serialization/deserialization of function return values
 - Type-safe process communication
 - Error handling with custom error types
 - Debug mode for troubleshooting process execution
@@ -48,9 +48,6 @@ pub fn add_points(p1: Point, p2: Point) -> Point {
 }
 
 fn main() {
-    // Initialize the process-fun runtime
-    process_fun::init_process_fun!();
-    
     let p1 = Point { x: 1, y: 2 };
     let p2 = Point { x: 3, y: 4 };
     

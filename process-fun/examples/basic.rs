@@ -1,5 +1,5 @@
 use process_fun::process;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Point {
@@ -20,7 +20,7 @@ pub fn calculate_distance(p1: Point, p2: Point) -> f64 {
 pub fn move_point(mut point: Point, dx: i32, dy: i32) -> Point {
     point.x += dx;
     point.y += dy;
-    point  // Changes only affect returned value
+    point // Changes only affect returned value
 }
 
 fn main() {

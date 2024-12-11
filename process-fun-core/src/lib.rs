@@ -39,7 +39,7 @@ pub fn write_to_pipe(mut fd: Sender, data: &[u8]) -> Result<(), ProcessFunError>
 
     fd.write_all(data)
         .map_err(|e| ProcessFunError::ProcessError(format!("Failed to write to pipe: {}", e)))?;
-    
+
     // Let the pipe be automatically flushed and closed when dropped
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Successfully wrote data to pipe");

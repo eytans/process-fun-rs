@@ -65,22 +65,6 @@ use serde::{Deserialize, Serialize};
 
 pub use process_fun_macro::process;
 
-/// Initialize the process-fun runtime. This should be called at the start of your main function.
-///
-/// This macro sets up the necessary runtime environment for process-fun to work. It:
-/// 1. Checks command-line arguments for special process hash arguments
-/// 2. If a hash is present, it looks up and executes the corresponding function
-/// 3. If no hash is present, it continues normal execution
-///
-/// # Example
-///
-/// ```rust
-/// fn main() {
-///     process_fun::init_process_fun!();
-///     // Your normal application code here
-/// }
-/// ```
-
 #[cfg(test)]
 mod tests {
     use super::*;
