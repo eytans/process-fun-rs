@@ -2,6 +2,13 @@
 name = "process-fun"
 version = "0.1.0"
 edition = "2021"
+description = "A Rust library for process management and inter-process communication"
+license = "Apache-2"
+repository = "https://github.com/eytans/process-fun-rs"
+documentation = "https://docs.rs/process-fun"
+readme = "../README.md"
+keywords = ["process", "ipc", "communication"]
+categories = ["development-tools", "os"]
 
 [features]
 debug = [
@@ -10,15 +17,14 @@ debug = [
 ]
 
 [dependencies]
-process-fun-core = { path = "../process-fun-core" }
-process-fun-macro = { path = "../process-fun-macro" }
+process-fun-core = { version = "0.1.0" }
+process-fun-macro = { version = "0.1.0" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = "0.4"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 quote = { workspace = true }
-inventory = "0.3"
 interprocess = "2.2.2"
 nix = { version = "0.29", features = ["process"] }
 

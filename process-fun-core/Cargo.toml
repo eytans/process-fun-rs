@@ -2,6 +2,13 @@
 name = "process-fun-core"
 version = "0.1.0"
 edition = "2021"
+description = "Core functionality for process-fun, a Rust library for process management and IPC"
+license = "Apache-2"
+repository = "https://github.com/eytans/process-fun-rs"
+documentation = "https://docs.rs/process-fun-core"
+readme = "../README.md"
+keywords = ["process", "ipc", "communication"]
+categories = ["development-tools", "os"]
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
@@ -10,7 +17,6 @@ thiserror = { workspace = true }
 interprocess = "2.2.2"
 nix = { version = "0.29", features = ["process", "fs", "signal"] }
 syn = { workspace = true }
-crossbeam-channel = "0.5"
 
 [features]
 debug = []

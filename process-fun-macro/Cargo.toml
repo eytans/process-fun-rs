@@ -2,6 +2,13 @@
 name = "process-fun-macro"
 version = "0.1.0"
 edition = "2021"
+description = "Procedural macros for process-fun, a Rust library for process management and IPC"
+license = "Apache-2"
+repository = "https://github.com/eytans/process-fun-rs"
+documentation = "https://docs.rs/process-fun-macro"
+readme = "../README.md"
+keywords = ["process", "ipc", "macros"]
+categories = ["development-tools", "os"]
 
 [lib]
 proc-macro = true
@@ -11,12 +18,11 @@ debug = []
 test-nocapture = []
 
 [dependencies]
-process-fun-core = { path = "../process-fun-core" }
+process-fun-core = { version = "0.1.0" }
 syn = { workspace = true, features = ["full"] }
 quote = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-inventory = "0.3"
 proc-macro2 = "1.0"
 prettyplease = "0.2.25"
 proc-macro-error = "1.0"
