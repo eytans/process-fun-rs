@@ -86,8 +86,8 @@
 #[allow(unused)]
 use serde::{Deserialize, Serialize};
 
-pub use process_fun_macro::process;
 pub use process_fun_core::*;
+pub use process_fun_macro::process;
 
 #[cfg(test)]
 mod tests {

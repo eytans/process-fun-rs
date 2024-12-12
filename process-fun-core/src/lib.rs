@@ -23,8 +23,8 @@ use thiserror::Error;
 // Re-export specific items needed by generated code with clear namespacing
 pub mod sys {
     pub use nix::sys::signal::{self, Signal};
-    pub use nix::unistd::{fork, ForkResult, Pid};
     pub use nix::sys::wait::{waitpid, WaitStatus};
+    pub use nix::unistd::{fork, ForkResult, Pid};
 }
 
 pub mod json {
