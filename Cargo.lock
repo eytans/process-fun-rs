@@ -21,21 +21,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
-name = "crossbeam-channel"
-version = "0.5.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-utils"
-version = "0.8.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22ec99545bb0ed0ea7bb9b8e1e9122ea386ff8a48c0922e43f36d45ab09e0e80"
-
-[[package]]
 name = "doctest-file"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,12 +54,6 @@ dependencies = [
  "widestring",
  "windows-sys",
 ]
-
-[[package]]
-name = "inventory"
-version = "0.3.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f958d3d68f4167080a18141e10381e7634563984a537f2a49a30fd8e53ac5767"
 
 [[package]]
 name = "itoa"
@@ -172,7 +151,6 @@ name = "process-fun"
 version = "0.1.0"
 dependencies = [
  "interprocess",
- "inventory",
  "log",
  "nix",
  "process-fun-core",
@@ -189,7 +167,6 @@ dependencies = [
 name = "process-fun-core"
 version = "0.1.0"
 dependencies = [
- "crossbeam-channel",
  "interprocess",
  "nix",
  "serde",
@@ -202,7 +179,6 @@ dependencies = [
 name = "process-fun-macro"
 version = "0.1.0"
 dependencies = [
- "inventory",
  "prettyplease",
  "proc-macro-error",
  "proc-macro2",

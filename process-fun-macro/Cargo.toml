@@ -18,7 +18,7 @@ debug = []
 test-nocapture = []
 
 [dependencies]
-process-fun-core = { version = "0.1.0" }
+process-fun-core = { version = "0.1.0", path = "../process-fun-core" }
 syn = { workspace = true, features = ["full"] }
 quote = { workspace = true }
 serde = { workspace = true }

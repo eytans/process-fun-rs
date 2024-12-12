@@ -17,8 +17,8 @@ debug = [
 ]
 
 [dependencies]
-process-fun-core = { version = "0.1.0" }
-process-fun-macro = { version = "0.1.0" }
+process-fun-core = { version = "0.1.0", path = "../process-fun-core" }
+process-fun-macro = { version = "0.1.0", path = "../process-fun-macro" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
