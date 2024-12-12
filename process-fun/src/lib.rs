@@ -173,7 +173,7 @@ mod tests {
     #[process]
     fn write_file_slow() -> bool {
         // Try to write to a file after sleeping
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(5));
         fs::write("test_timeout.txt", "This should not be written").unwrap();
         true
     }
