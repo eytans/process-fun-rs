@@ -1,5 +1,7 @@
 use process_fun::process;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use std::thread;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Point {
@@ -23,6 +25,19 @@ pub fn move_point(mut point: Point, dx: i32, dy: i32) -> Point {
     point // Changes only affect returned value
 }
 
+// Example showing timeout functionality
+#[process]
+pub fn slow_calculation(iterations: u64) -> u64 {
+    let mut sum: u64 = 0;
+    for i in 0..iterations {
+        sum = sum.wrapping_add(i as u64);
+        if i % 1000 == 0 {
+            thread::sleep(Duration::from_micros(1));
+        }
+    }
+    sum
+}
+
 fn main() {
     println!("Running examples with debug prints enabled...\n");
 
@@ -31,7 +46,8 @@ fn main() {
     let p2 = Point { x: 3, y: 4 };
 
     println!("Calculating distance between {:?} and {:?}...", &p1, &p2);
-    match calculate_distance_process(p1.clone(), p2.clone()) {
+    let mut process = calculate_distance_process(p1.clone(), p2.clone()).unwrap();
+    match process.timeout(Duration::from_secs(1)) {
         Ok(distance) => println!("Distance: {}", distance), // Should print: Distance: 5.0
         Err(e) => panic!("Error: {}", e),
     }
@@ -43,12 +59,22 @@ fn main() {
     println!("Original point: {:?}", &original);
 
     // Move point in separate process
-    match move_point_process(original.clone(), 5, 5) {
+    let mut process = move_point_process(original.clone(), 5, 5).unwrap();
+    match process.timeout(Duration::from_secs(1)) {
         Ok(moved) => {
             // Original point remains unchanged
             println!("Original point (unchanged): {:?}", original);
             println!("Moved point (new): {:?}", moved);
         }
         Err(e) => panic!("Error: {}", e),
+    }
+    println!();
+
+    // Timeout example
+    println!("Running slow calculation with timeout...");
+    let mut process = slow_calculation_process(10_000_000).unwrap();
+    match process.timeout(Duration::from_millis(100)) {
+        Ok(result) => println!("Calculation completed with result: {}", result),
+        Err(e) => println!("Calculation timed out as expected: {}", e),
     }
 }

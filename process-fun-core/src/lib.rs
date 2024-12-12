@@ -17,13 +17,14 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
+use std::sync::mpsc;
 use thiserror::Error;
 
 /// Wrapper for a process execution that allows awaiting or aborting the process
 #[derive(Debug)]
 pub struct ProcessWrapper<T> {
     child_pid: Pid,
-    start_time: SystemTime,
+    start_time: Option<SystemTime>,
     receiver: Option<Recver>,
     result: Arc<Mutex<Option<Vec<u8>>>>,
     _ghost: std::marker::PhantomData<T>,
@@ -40,10 +41,10 @@ where
     T: serde::de::DeserializeOwned,
 {
     /// Create a new ProcessWrapper
-    pub fn new(child_pid: Pid, start_time: SystemTime, receiver: Recver) -> Self {
+    pub fn new(child_pid: Pid, receiver: Recver) -> Self {
         Self {
             child_pid,
-            start_time,
+            start_time: None,
             receiver: Some(receiver),
             result: Arc::new(Mutex::new(None)),
             _ghost: std::marker::PhantomData,
@@ -52,6 +53,9 @@ where
 
     /// Wait for the process to complete and return its result
     pub fn wait(&mut self) -> Result<T, ProcessFunError> {
+        // Ensure we have the start time for process validation
+        self.ensure_start_time()?;
+
         // Check if we already have a result
         if let Some(bytes) = self.result.lock().unwrap().take() {
             return serde_json::from_slice(&bytes).map_err(ProcessFunError::from);
@@ -71,10 +75,16 @@ where
 
     /// Wait for the process to complete with a timeout
     pub fn timeout(&mut self, duration: Duration) -> Result<T, ProcessFunError> {
+        // Ensure we have the start time for process validation
+        self.ensure_start_time()?;
+
         // Take ownership of the receiver
         let receiver = self.receiver.take().ok_or_else(|| {
             ProcessFunError::ProcessError("Process already completed".to_string())
         })?;
+
+        // Create a channel for the calculation thread to signal completion
+        let (tx, rx) = mpsc::channel();
 
         // Spawn thread to read from pipe
         let result = self.result.clone();
@@ -82,43 +92,64 @@ where
             let mut receiver = receiver;
             if let Ok(bytes) = read_from_pipe(&mut receiver) {
                 *result.lock().unwrap() = Some(bytes);
+                let _ = tx.send(true); // Signal completion
             }
         });
 
-        // Wait for result with timeout
-        let start = SystemTime::now();
-        let mut elapsed = start.elapsed().unwrap();
-        while elapsed < duration {
-            if let Some(bytes) = self.result.lock().unwrap().take() {
-                return serde_json::from_slice(&bytes).map_err(ProcessFunError::from);
+        // Wait for either timeout or completion
+        match rx.recv_timeout(duration) {
+            Ok(_) => {
+                // Process completed within timeout
+                if let Some(bytes) = self.result.lock().unwrap().take() {
+                    return serde_json::from_slice(&bytes).map_err(ProcessFunError::from);
+                }
+                // This shouldn't happen as we got a completion signal
+                Err(ProcessFunError::ProcessError("Process result not found".to_string()))
             }
-            let remaining = duration.saturating_sub(elapsed);
-            if remaining.is_zero() {
-                break;
+            Err(_) => {
+                // Timeout occurred
+                self.abort()?;
+                Err(ProcessFunError::TimeoutError)
             }
-            std::thread::sleep(remaining);
-            elapsed = start.elapsed().unwrap();
         }
-
-        // Timeout occurred
-        self.abort()?;
-        Err(ProcessFunError::TimeoutError)
     }
 }
 
 impl<T> ProcessWrapper<T> {
-    /// Check if the process is still the same one we created
-    fn is_same_process(&self) -> bool {
-        let proc_path = format!("/proc/{}/stat", self.child_pid.as_raw());
-        stat::stat(proc_path.as_str())
-            .map(|stat| {
-                let current_start = SystemTime::UNIX_EPOCH + Duration::from_secs(stat.st_ctime as u64);
-                current_start == self.start_time
-            })
-            .unwrap_or(false)
+    /// Lazily read the start time from pipe if not already read
+    fn ensure_start_time(&mut self) -> Result<(), ProcessFunError> {
+        if self.start_time.is_some() {
+            return Ok(());
+        }
+
+        if let Some(receiver) = &mut self.receiver {
+            let start_time = read_start_time_from_pipe(receiver)?;
+            self.start_time = Some(start_time);
+            Ok(())
+        } else {
+            Err(ProcessFunError::ProcessError("Process already completed".to_string()))
+        }
     }
 
-    fn kill(&self) -> Result<(), Errno> {
+    /// Check if the process is still the same one we created
+    fn is_same_process(&mut self) -> bool {
+        if self.ensure_start_time().is_err() {
+            return false;
+        }
+        // Ensure we have the start time for validation
+        if let Some(start_time) = self.start_time {
+            let proc_path = format!("/proc/{}/stat", self.child_pid.as_raw());
+            stat::stat(proc_path.as_str())
+                .map(|stat| {
+                    stat.st_ctime as u64 == start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+                })
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    }
+
+    fn kill(&mut self) -> Result<(), Errno> {
         // Only kill if it's the same process we created
         if self.is_same_process() {
             match signal::kill(self.child_pid, Signal::SIGKILL) {
