@@ -12,12 +12,12 @@ use nix::fcntl::OFlag;
 use nix::sys::signal::{self, Signal};
 use nix::sys::stat;
 use nix::unistd::{fork, pipe2, ForkResult, Pid};
-use std::{fmt, mem};
 use std::io::prelude::*;
 use std::path::PathBuf;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use std::sync::mpsc;
+use std::{fmt, mem};
 use thiserror::Error;
 
 /// Wrapper for a process execution that allows awaiting or aborting the process
@@ -104,7 +104,9 @@ where
                     return serde_json::from_slice(&bytes).map_err(ProcessFunError::from);
                 }
                 // This shouldn't happen as we got a completion signal
-                Err(ProcessFunError::ProcessError("Process result not found".to_string()))
+                Err(ProcessFunError::ProcessError(
+                    "Process result not found".to_string(),
+                ))
             }
             Err(_) => {
                 // Timeout occurred
@@ -127,7 +129,9 @@ impl<T> ProcessWrapper<T> {
             self.start_time = Some(start_time);
             Ok(())
         } else {
-            Err(ProcessFunError::ProcessError("Process already completed".to_string()))
+            Err(ProcessFunError::ProcessError(
+                "Process already completed".to_string(),
+            ))
         }
     }
 
@@ -141,7 +145,11 @@ impl<T> ProcessWrapper<T> {
             let proc_path = format!("/proc/{}/stat", self.child_pid.as_raw());
             stat::stat(proc_path.as_str())
                 .map(|stat| {
-                    stat.st_ctime as u64 == start_time.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+                    stat.st_ctime as u64
+                        == start_time
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs()
                 })
                 .unwrap_or(false)
         } else {
@@ -178,7 +186,7 @@ impl<T> Drop for ProcessWrapper<T> {
     fn drop(&mut self) {
         // Take ownership of the receiver to ensure it's dropped
         let _ = self.receiver.take();
-        
+
         // Attempt to kill the process if it's still running
         let _ = self.kill();
     }

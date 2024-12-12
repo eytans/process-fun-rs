@@ -19,3 +19,4 @@ serde_json = { workspace = true }
 inventory = "0.3"
 proc-macro2 = "1.0"
 prettyplease = "0.2.25"
+proc-macro-error = "1.0"

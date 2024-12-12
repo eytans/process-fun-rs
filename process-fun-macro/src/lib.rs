@@ -7,20 +7,22 @@
 //! which re-exports these macros in a more convenient way.
 
 use proc_macro::TokenStream;
+use proc_macro_error::{proc_macro_error, Diagnostic, Level};
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, ItemFn};
+use syn::{parse_macro_input, spanned::Spanned, ItemFn, PatType, Type};
 
 /// Attribute macro that creates an additional version of a function that executes in a separate process.
 ///
 /// When applied to a function named `foo`, this macro:
 /// 1. Keeps the original function unchanged, allowing normal in-process calls
 /// 2. Creates a new function named `foo_process` that returns a ProcessWrapper
-/// 
+///
 /// # Requirements
 ///
 /// The function must:
 /// * Have arguments and return type that implement `Serialize` and `Deserialize`
 ///
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
@@ -39,11 +41,28 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_name = &input_fn.sig.ident;
     let process_fn_name = format_ident!("{}_process", fn_name);
     let fn_args = &input_fn.sig.inputs;
-    
+
     let fn_output = match &input_fn.sig.output {
         syn::ReturnType::Default => quote!(()),
         syn::ReturnType::Type(_, ty) => quote!(#ty),
     };
+
+    // Check for mutable arguments
+    for arg in fn_args.iter() {
+        if let syn::FnArg::Typed(PatType { ty, .. }) = arg {
+            if let Type::Reference(type_ref) = &**ty {
+                if type_ref.mutability.is_some() {
+                    Diagnostic::spanned(
+                        ty.span().unwrap().into(),
+                        Level::Warning,
+                        "Mutable variables changes will not be reflected in the parent process."
+                            .to_string(),
+                    )
+                    .emit();
+                }
+            }
+        }
+    }
 
     let mut self_stream = false;
     let arg_names: Vec<_> = fn_args
@@ -61,14 +80,15 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 self_stream = true;
                 None
             }
-        }).collect();
+        })
+        .collect();
 
     let arg_types: Vec<_> = fn_args
         .iter()
         .map(|arg| match arg {
             syn::FnArg::Typed(pat_type) => pat_type.ty.clone(),
             syn::FnArg::Receiver(receiver) => {
-                if let Some((and_token, lifetime)) = &receiver.reference {
+                if let Some((_and_token, lifetime)) = &receiver.reference {
                     if receiver.mutability.is_some() {
                         syn::parse_quote!(&#lifetime mut Self)
                     } else {
@@ -101,7 +121,7 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
             // Create pipes for result and start time communication
             #[cfg(feature = "debug")]
             eprintln!("[process-fun-debug] Creating pipes for process function: {}", #fn_name_str);
-            
+
             let (mut read_pipe, mut write_pipe) = process_fun_core::create_pipes()?;
 
             // Fork the process

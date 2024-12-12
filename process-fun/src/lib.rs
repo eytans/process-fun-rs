@@ -92,8 +92,8 @@ pub use process_fun_macro::process;
 mod tests {
     use super::*;
     use std::fs;
-    use std::time::Duration;
     use std::thread;
+    use std::time::Duration;
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct Point {
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn test_self_methods() {
         let counter = Counter::new(5);
-        
+
         // Test immutable reference
         let result = counter.get_value_process().unwrap().wait().unwrap();
         assert_eq!(result, 5);
@@ -184,17 +184,19 @@ mod tests {
 
         let mut process = write_file_slow_process().unwrap();
         let result = process.timeout(Duration::from_millis(500));
-        
+
         // Should timeout
         assert!(result.is_err());
-        
+
         // Give a small grace period for the filesystem
         thread::sleep(Duration::from_secs(2));
-        
+
         // File should not exist since process was killed
-        assert!(!std::path::Path::new("test_timeout.txt").exists(), 
-                "Process wasn't killed in time - file was created");
-        
+        assert!(
+            !std::path::Path::new("test_timeout.txt").exists(),
+            "Process wasn't killed in time - file was created"
+        );
+
         // Clean up
         let _ = fs::remove_file("test_timeout.txt");
     }
@@ -219,8 +221,14 @@ mod tests {
         let start_time = std::time::Instant::now();
         let result = process.timeout(Duration::from_secs(5));
         let elapsed = start_time.elapsed();
-        assert!(result.is_ok(), "Long calculation should complete within timeout");
-        assert!(elapsed < Duration::from_secs(3), "Long calculation should complete within timeout and return early");
+        assert!(
+            result.is_ok(),
+            "Long calculation should complete within timeout"
+        );
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "Long calculation should complete within timeout and return early"
+        );
         // Verify the result matches in-process calculation
         let expected = long_calculation(iterations);
         assert_eq!(result.unwrap(), expected);

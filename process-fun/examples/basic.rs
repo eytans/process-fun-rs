@@ -1,7 +1,7 @@
 use process_fun::process;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Point {
@@ -19,6 +19,7 @@ pub fn calculate_distance(p1: Point, p2: Point) -> f64 {
 
 // Example showing mutable data behavior
 #[process]
+#[allow(unused_mut)]
 pub fn move_point(mut point: Point, dx: i32, dy: i32) -> Point {
     point.x += dx;
     point.y += dy;
