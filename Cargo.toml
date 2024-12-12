@@ -5,6 +5,7 @@ members = [
     "process-fun",
     "process-fun-core",
 ]
+package.license = "Apache-2.0"
 
 [workspace.dependencies]
 serde = { version = "1.0.214", features = ["derive"] }
