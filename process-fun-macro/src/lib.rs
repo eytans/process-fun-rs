@@ -86,43 +86,42 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #input_fn
 
         #[allow(non_snake_case)]
-        pub fn #process_fn_name(#fn_args) -> Result<#fn_output, process_fun_core::ProcessFunError> {
+        pub fn #process_fn_name(#fn_args) -> Result<process_fun_core::ProcessWrapper<#fn_output>, process_fun_core::ProcessFunError> {
             use nix::unistd::ForkResult;
-            use serde_json;
+            use std::time::SystemTime;
 
-            // Create pipe for result communication
+            // Create pipes for result and start time communication
             eprintln!("[process-fun-debug] Creating pipes for process function: {}", #fn_name_str);
             let (mut read_pipe, mut write_pipe) = process_fun_core::create_pipes()?;
 
             // Fork the process
             eprintln!("[process-fun-debug] Forking process for function: {}", #fn_name_str);
             match process_fun_core::fork_process()? {
-                ForkResult::Parent { .. } => {
-                    // Parent process - close write end immediately
+                ForkResult::Parent { child } => {
+                    // Parent process - close write ends immediately
                     std::mem::drop(write_pipe);
 
                     #[cfg(feature = "debug")]
-                    eprintln!("[process-fun-debug] Parent process waiting for result...");
+                    eprintln!("[process-fun-debug] Parent process waiting for start time...");
 
-                    // Read result from pipe
-                    let result_bytes = process_fun_core::read_from_pipe(&mut read_pipe)?;
-
-                    // Close read end after reading
-                    std::mem::drop(read_pipe);
-
-                    let result: #fn_output = serde_json::from_slice(&result_bytes)?;
+                    // Read start time from pipe
+                    let start_time = process_fun_core::read_start_time_from_pipe(&mut read_pipe)?;
 
                     #[cfg(feature = "debug")]
-                    eprintln!("[process-fun-debug] Parent received result: {:?}", &result);
+                    eprintln!("[process-fun-debug] Parent process received start time");
 
-                    Ok(result)
+                    // Create ProcessWrapper with child pid and receiver
+                    Ok(process_fun_core::ProcessWrapper::new(child, start_time, read_pipe))
                 }
                 ForkResult::Child => {
-                    // Child process - close read end immediately
+                    // Child process - close read ends immediately
                     std::mem::drop(read_pipe);
 
                     #[cfg(feature = "debug")]
                     eprintln!("[process-fun-debug] Child process started");
+
+                    // Get and send start time
+                    process_fun_core::write_time(&mut write_pipe, SystemTime::now())?;
 
                     #[cfg(feature = "debug")]
                     {

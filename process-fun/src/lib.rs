@@ -53,7 +53,7 @@
 //!     let result1 = add_points(p1.clone(), p2.clone());
 //!     
 //!     // Use process version (out-of-process)
-//!     let result2 = add_points_process(p1, p2).unwrap();
+//!     let result2 = add_points_process(p1, p2).unwrap().wait().unwrap();
 //!     
 //!     assert_eq!(result1.x, result2.x);
 //!     assert_eq!(result1.y, result2.y);
@@ -88,7 +88,7 @@ mod tests {
         let p1 = Point { x: 1, y: 2 };
         let p2 = Point { x: 3, y: 4 };
 
-        let result = add_points_process(p1, p2).unwrap();
+        let result = add_points_process(p1, p2).unwrap().wait().unwrap();
         assert_eq!(result.x, 4);
         assert_eq!(result.y, 6);
     }
