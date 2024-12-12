@@ -114,28 +114,25 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #input_fn
 
         #[allow(non_snake_case)]
-        pub fn #process_fn_name(#fn_args) -> Result<process_fun_core::ProcessWrapper<#fn_output>, process_fun_core::ProcessFunError> {
-            use nix::unistd::ForkResult;
-            use std::time::SystemTime;
-
+        pub fn #process_fn_name(#fn_args) -> Result<process_fun::ProcessWrapper<#fn_output>, process_fun::ProcessFunError> {
             // Create pipes for result and start time communication
             #[cfg(feature = "debug")]
             eprintln!("[process-fun-debug] Creating pipes for process function: {}", #fn_name_str);
 
-            let (mut read_pipe, mut write_pipe) = process_fun_core::create_pipes()?;
+            let (mut read_pipe, mut write_pipe) = process_fun::create_pipes()?;
 
             // Fork the process
             #[cfg(feature = "debug")]
             eprintln!("[process-fun-debug] Forking process for function: {}", #fn_name_str);
-            match process_fun_core::fork_process()? {
-                ForkResult::Parent { child } => {
+            match process_fun::fork_process()? {
+                process_fun::sys::ForkResult::Parent { child } => {
                     // Parent process - close write ends immediately
                     std::mem::drop(write_pipe);
 
                     // Create ProcessWrapper with child pid and receiver
-                    Ok(process_fun_core::ProcessWrapper::new(child, read_pipe))
+                    Ok(process_fun::ProcessWrapper::new(child, read_pipe))
                 }
-                ForkResult::Child => {
+                process_fun::sys::ForkResult::Child => {
                     // Child process - close read ends immediately
                     std::mem::drop(read_pipe);
 
@@ -143,7 +140,7 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     eprintln!("[process-fun-debug] Child process started");
 
                     // Get and send start time
-                    process_fun_core::write_time(&mut write_pipe, SystemTime::now())?;
+                    process_fun::write_time(&mut write_pipe, std::time::SystemTime::now())?;
 
                     #[cfg(feature = "debug")]
                     {
@@ -158,8 +155,8 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     eprintln!("[process-fun-debug] Child process result: {:?}", &result);
 
                     // Serialize and write result
-                    let result_json = serde_json::to_string(&result)?;
-                    process_fun_core::write_to_pipe(write_pipe, result_json.as_bytes())?;
+                    let result_bytes = process_fun::json::to_vec(&result)?;
+                    process_fun::write_to_pipe(write_pipe, &result_bytes)?;
 
                     #[cfg(feature = "debug")]
                     eprintln!("[process-fun-debug] Child process completed");

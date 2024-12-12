@@ -20,6 +20,17 @@ use std::time::{Duration, SystemTime};
 use std::{fmt, mem};
 use thiserror::Error;
 
+// Re-export specific items needed by generated code with clear namespacing
+pub mod sys {
+    pub use nix::sys::signal::{self, Signal};
+    pub use nix::unistd::{fork, ForkResult, Pid};
+    pub use nix::sys::wait::{waitpid, WaitStatus};
+}
+
+pub mod json {
+    pub use serde_json::{from_slice, to_vec};
+}
+
 /// Wrapper for a process execution that allows awaiting or aborting the process
 #[derive(Debug)]
 pub struct ProcessWrapper<T> {

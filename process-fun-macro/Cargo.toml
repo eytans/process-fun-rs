@@ -1,6 +1,6 @@
 [package]
 name = "process-fun-macro"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Procedural macros for process-fun, a Rust library for process management and IPC"
 license = "Apache-2.0"
@@ -18,7 +18,7 @@ debug = []
 test-nocapture = []
 
 [dependencies]
-process-fun-core = { version = "0.1.0", path = "../process-fun-core" }
+process-fun-core = { version = "0.1.1", path = "../process-fun-core" }
 syn = { workspace = true, features = ["full"] }
 quote = { workspace = true }
 serde = { workspace = true }

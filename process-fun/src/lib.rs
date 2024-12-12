@@ -87,6 +87,7 @@
 use serde::{Deserialize, Serialize};
 
 pub use process_fun_macro::process;
+pub use process_fun_core::*;
 
 #[cfg(test)]
 mod tests {
