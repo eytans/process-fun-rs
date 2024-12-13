@@ -1,6 +1,6 @@
 [package]
 name = "process-fun"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "A Rust library for process management and inter-process communication"
 license = "Apache-2.0"
@@ -18,8 +18,8 @@ debug = [
 ]
 
 [dependencies]
-process-fun-core = { version = "0.1.1", path = "../process-fun-core" }
-process-fun-macro = { version = "0.1.1", path = "../process-fun-macro" }
+process-fun-core = { version = "0.1.2", path = "../process-fun-core" }
+process-fun-macro = { version = "0.1.2", path = "../process-fun-macro" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

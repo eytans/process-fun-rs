@@ -139,8 +139,10 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #[cfg(feature = "debug")]
                     eprintln!("[process-fun-debug] Child process started");
 
-                    // Get and send start time
-                    process_fun::write_time(&mut write_pipe, std::time::SystemTime::now())?;
+                    // Get and send start time by stating the child process
+                    let pid = process_fun::sys::getpid();
+                    let start_time = process_fun::stat_pid_start(pid)?;
+                    process_fun::write_time(&mut write_pipe, start_time)?;
 
                     #[cfg(feature = "debug")]
                     {
@@ -167,6 +169,11 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
+
+    #[cfg(feature = "debug")]
+    {
+        dbg!(expanded.to_string());
+    }
 
     #[cfg(feature = "debug")]
     {

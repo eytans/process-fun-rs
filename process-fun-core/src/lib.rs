@@ -10,7 +10,6 @@ use interprocess::unnamed_pipe::{Recver, Sender};
 use nix::errno::Errno;
 use nix::fcntl::OFlag;
 use nix::sys::signal::{self, Signal};
-use nix::sys::stat;
 use nix::unistd::{fork, pipe2, ForkResult, Pid};
 use std::io::prelude::*;
 use std::path::PathBuf;
@@ -24,7 +23,7 @@ use thiserror::Error;
 pub mod sys {
     pub use nix::sys::signal::{self, Signal};
     pub use nix::sys::wait::{waitpid, WaitStatus};
-    pub use nix::unistd::{fork, ForkResult, Pid};
+    pub use nix::unistd::{fork, getpid, ForkResult, Pid};
 }
 
 pub mod json {
@@ -128,6 +127,21 @@ where
     }
 }
 
+pub fn stat_pid_start(pid: Pid) -> Result<SystemTime, ProcessFunError> {
+    let proc_path = format!("/proc/{}/stat", pid.as_raw());
+    nix::sys::stat::stat(proc_path.as_str())
+        .map_err(|e| ProcessFunError::ProcessError(format!("Failed to stat process: {}", e)))
+        .and_then(|stat| {
+            SystemTime::UNIX_EPOCH
+                .checked_add(Duration::from_secs(stat.st_ctime as u64))
+                .ok_or_else(|| {
+                    ProcessFunError::ProcessError(
+                        "Failed to calculate process start time".to_string(),
+                    )
+                })
+        })
+}
+
 impl<T> ProcessWrapper<T> {
     /// Lazily read the start time from pipe if not already read
     fn ensure_start_time(&mut self) -> Result<(), ProcessFunError> {
@@ -153,15 +167,8 @@ impl<T> ProcessWrapper<T> {
         }
         // Ensure we have the start time for validation
         if let Some(start_time) = self.start_time {
-            let proc_path = format!("/proc/{}/stat", self.child_pid.as_raw());
-            stat::stat(proc_path.as_str())
-                .map(|stat| {
-                    stat.st_ctime as u64
-                        == start_time
-                            .duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs()
-                })
+            stat_pid_start(self.child_pid)
+                .map(|stat| stat == start_time)
                 .unwrap_or(false)
         } else {
             false

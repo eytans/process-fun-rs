@@ -190,16 +190,14 @@ mod tests {
         assert!(result.is_err());
 
         // Give a small grace period for the filesystem
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(5));
 
         // File should not exist since process was killed
-        assert!(
-            !std::path::Path::new("test_timeout.txt").exists(),
-            "Process wasn't killed in time - file was created"
-        );
+        let exists = std::path::Path::new("test_timeout.txt").exists();
 
         // Clean up
         let _ = fs::remove_file("test_timeout.txt");
+        assert!(!exists, "Process wasn't killed in time - file was created");
     }
 
     #[process]
