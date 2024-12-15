@@ -19,10 +19,9 @@ test-nocapture = []
 
 [dependencies]
 process-fun-core = { version = "0.1.2", path = "../process-fun-core" }
-syn = { workspace = true, features = ["full"] }
+syn = { workspace = true }
 quote = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 proc-macro2 = "1.0"
 prettyplease = "0.2.25"
 proc-macro-error = "1.0"

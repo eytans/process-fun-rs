@@ -9,8 +9,7 @@ package.license = "Apache-2.0"
 
 [workspace.dependencies]
 serde = { version = "1.0.214", features = ["derive"] }
-serde_json = "1.0.132"
-syn = { version = "2.0.90", features = ["full"] }
+syn = { version = "2.0.90", features = [] }
 quote = "1.0"
 thiserror = "2.0.4"
 itertools = "0.13"

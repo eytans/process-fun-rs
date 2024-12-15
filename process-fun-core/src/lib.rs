@@ -28,13 +28,13 @@ pub mod sys {
 
 // Use a more efficient binary serialization format
 pub mod ser {
-    use bincode::{serialize, deserialize, Error};
+    use bincode::{deserialize, serialize, Error};
     use serde::{Deserialize, Serialize};
     pub fn to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, Error> {
         serialize(value)
     }
-    
-    pub fn from_slice<'de, T: Deserialize<'de>>(bytes: &'de[u8]) -> Result<T, Error> {
+
+    pub fn from_slice<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> Result<T, Error> {
         let val = deserialize(bytes)?;
         Ok(val)
     }
@@ -78,7 +78,7 @@ where
 
         // Check if we already have a result
         if let Some(bytes) = self.result.lock().unwrap().take() {
-            return ser::from_slice(&bytes).map_err(|e| ProcessFunError::SerError(e));
+            return ser::from_slice(&bytes).map_err(ProcessFunError::SerError);
         }
 
         // Read result from pipe
@@ -88,8 +88,7 @@ where
 
         let mut receiver = receiver;
         let result_bytes = read_from_pipe(&mut receiver)?;
-        let result: T = ser::from_slice(&result_bytes)
-            .map_err(|e| ProcessFunError::SerError(e))?;
+        let result: T = ser::from_slice(&result_bytes)?;
 
         Ok(result)
     }
@@ -122,8 +121,7 @@ where
             Ok(_) => {
                 // Process completed within timeout
                 if let Some(bytes) = self.result.lock().unwrap().take() {
-                    return ser::from_slice(&bytes)
-                        .map_err(|e| ProcessFunError::SerError(e));
+                    return ser::from_slice(&bytes).map_err(ProcessFunError::SerError);
                 }
                 // This shouldn't happen as we got a completion signal
                 Err(ProcessFunError::ProcessError(
@@ -374,7 +372,6 @@ pub enum ProcessFunError {
     /// Failed to parse Rust source code
     #[error("Failed to parse Rust file: {0}")]
     ParseError(#[from] syn::Error),
-
 
     /// Error during process communication between parent and child processes
     #[error("Process communication error: {0}")]
