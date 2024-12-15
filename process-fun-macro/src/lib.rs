@@ -42,7 +42,7 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let process_fn_name = format_ident!("{}_process", fn_name);
     let fn_args = &input_fn.sig.inputs;
     let generics = &input_fn.sig.generics;
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let fn_output = match &input_fn.sig.output {
         syn::ReturnType::Default => quote!(()),
@@ -159,7 +159,7 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     eprintln!("[process-fun-debug] Child process result: {:?}", &result);
 
                     // Serialize and write result
-                    let result_bytes = process_fun::json::to_vec(&result)?;
+                    let result_bytes = process_fun::ser::to_vec(&result)?;
                     process_fun::write_to_pipe(write_pipe, &result_bytes)?;
 
                     #[cfg(feature = "debug")]

@@ -12,11 +12,11 @@ categories = ["development-tools", "os"]
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 interprocess = "2.2.2"
 nix = { version = "0.29", features = ["process", "fs", "signal"] }
 syn = { workspace = true }
+bincode = "1.3.3"
 
 [features]
 debug = []

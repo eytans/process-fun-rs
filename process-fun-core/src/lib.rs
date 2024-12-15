@@ -26,8 +26,18 @@ pub mod sys {
     pub use nix::unistd::{fork, getpid, ForkResult, Pid};
 }
 
-pub mod json {
-    pub use serde_json::{from_slice, to_vec};
+// Use a more efficient binary serialization format
+pub mod ser {
+    use bincode::{serialize, deserialize, Error};
+    use serde::{Deserialize, Serialize};
+    pub fn to_vec<T: Serialize>(value: &T) -> Result<Vec<u8>, Error> {
+        serialize(value)
+    }
+    
+    pub fn from_slice<'de, T: Deserialize<'de>>(bytes: &'de[u8]) -> Result<T, Error> {
+        let val = deserialize(bytes)?;
+        Ok(val)
+    }
 }
 
 /// Wrapper for a process execution that allows awaiting or aborting the process
@@ -68,7 +78,7 @@ where
 
         // Check if we already have a result
         if let Some(bytes) = self.result.lock().unwrap().take() {
-            return serde_json::from_slice(&bytes).map_err(ProcessFunError::from);
+            return ser::from_slice(&bytes).map_err(|e| ProcessFunError::SerError(e));
         }
 
         // Read result from pipe
@@ -78,7 +88,8 @@ where
 
         let mut receiver = receiver;
         let result_bytes = read_from_pipe(&mut receiver)?;
-        let result: T = serde_json::from_slice(&result_bytes)?;
+        let result: T = ser::from_slice(&result_bytes)
+            .map_err(|e| ProcessFunError::SerError(e))?;
 
         Ok(result)
     }
@@ -111,7 +122,8 @@ where
             Ok(_) => {
                 // Process completed within timeout
                 if let Some(bytes) = self.result.lock().unwrap().take() {
-                    return serde_json::from_slice(&bytes).map_err(ProcessFunError::from);
+                    return ser::from_slice(&bytes)
+                        .map_err(|e| ProcessFunError::SerError(e));
                 }
                 // This shouldn't happen as we got a completion signal
                 Err(ProcessFunError::ProcessError(
@@ -127,6 +139,7 @@ where
     }
 }
 
+#[inline]
 pub fn stat_pid_start(pid: Pid) -> Result<SystemTime, ProcessFunError> {
     let proc_path = format!("/proc/{}/stat", pid.as_raw());
     nix::sys::stat::stat(proc_path.as_str())
@@ -144,6 +157,7 @@ pub fn stat_pid_start(pid: Pid) -> Result<SystemTime, ProcessFunError> {
 
 impl<T> ProcessWrapper<T> {
     /// Lazily read the start time from pipe if not already read
+    #[inline]
     fn ensure_start_time(&mut self) -> Result<(), ProcessFunError> {
         if self.start_time.is_some() {
             return Ok(());
@@ -161,6 +175,7 @@ impl<T> ProcessWrapper<T> {
     }
 
     /// Check if the process is still the same one we created
+    #[inline]
     fn is_same_process(&mut self) -> bool {
         if self.ensure_start_time().is_err() {
             return false;
@@ -175,6 +190,7 @@ impl<T> ProcessWrapper<T> {
         }
     }
 
+    #[inline]
     fn kill(&mut self) -> Result<(), Errno> {
         // Only kill if it's the same process we created
         if self.is_same_process() {
@@ -211,6 +227,7 @@ impl<T> Drop for ProcessWrapper<T> {
 }
 
 /// Create a pipe for communication between parent and child processes
+#[inline]
 pub fn create_pipes() -> Result<(Recver, Sender), ProcessFunError> {
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Creating communication pipes");
@@ -231,15 +248,18 @@ pub fn create_pipes() -> Result<(Recver, Sender), ProcessFunError> {
 
 const SYSTEM_TIME_SIZE: usize = mem::size_of::<SystemTime>();
 
+#[inline]
 fn system_time_to_bytes_unsafe(time: SystemTime) -> [u8; SYSTEM_TIME_SIZE] {
     unsafe { mem::transmute::<SystemTime, [u8; SYSTEM_TIME_SIZE]>(time) }
 }
 
+#[inline]
 fn bytes_to_system_time_unsafe(bytes: [u8; SYSTEM_TIME_SIZE]) -> SystemTime {
     unsafe { mem::transmute::<[u8; SYSTEM_TIME_SIZE], SystemTime>(bytes) }
 }
 
 /// Write time to pipe
+#[inline]
 pub fn write_time(fd: &mut Sender, time: SystemTime) -> Result<(), ProcessFunError> {
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Writing start time to pipe");
@@ -254,6 +274,7 @@ pub fn write_time(fd: &mut Sender, time: SystemTime) -> Result<(), ProcessFunErr
 }
 
 /// Write data to a pipe and close it
+#[inline]
 pub fn write_to_pipe(mut fd: Sender, data: &[u8]) -> Result<(), ProcessFunError> {
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Writing {} bytes to pipe", data.len());
@@ -269,6 +290,7 @@ pub fn write_to_pipe(mut fd: Sender, data: &[u8]) -> Result<(), ProcessFunError>
 }
 
 /// Read start time from pipe
+#[inline]
 pub fn read_start_time_from_pipe(fd: &mut Recver) -> Result<SystemTime, ProcessFunError> {
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Reading start time from pipe");
@@ -284,6 +306,7 @@ pub fn read_start_time_from_pipe(fd: &mut Recver) -> Result<SystemTime, ProcessF
 }
 
 /// Read data from a pipe
+#[inline]
 pub fn read_from_pipe(fd: &mut Recver) -> Result<Vec<u8>, ProcessFunError> {
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Starting to read from pipe");
@@ -301,6 +324,7 @@ pub fn read_from_pipe(fd: &mut Recver) -> Result<Vec<u8>, ProcessFunError> {
 }
 
 /// Fork the current process and return ForkResult
+#[inline]
 pub fn fork_process() -> Result<ForkResult, ProcessFunError> {
     #[cfg(feature = "debug")]
     eprintln!("[process-fun-debug] Forking process");
@@ -351,13 +375,14 @@ pub enum ProcessFunError {
     #[error("Failed to parse Rust file: {0}")]
     ParseError(#[from] syn::Error),
 
+
     /// Error during process communication between parent and child processes
     #[error("Process communication error: {0}")]
     ProcessError(String),
 
-    /// JSON serialization/deserialization error for function arguments or results
-    #[error("Failed to serialize or deserialize JSON: {0}")]
-    JsonError(#[from] serde_json::Error),
+    /// serialization/deserialization error for function arguments or results
+    #[error("Failed to serialize or deserialize: {0}")]
+    SerError(#[from] bincode::Error),
 
     /// Process execution timed out
     #[error("Process execution timed out")]
