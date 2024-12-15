@@ -11,7 +11,7 @@ keywords = ["process", "ipc", "communication"]
 categories = ["development-tools", "os"]
 
 [features]
-default = ["debug"]
+default = []
 debug = [
     "process-fun-macro/debug",
     "process-fun-core/debug"
