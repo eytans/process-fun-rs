@@ -41,6 +41,8 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_name = &input_fn.sig.ident;
     let process_fn_name = format_ident!("{}_process", fn_name);
     let fn_args = &input_fn.sig.inputs;
+    let generics = &input_fn.sig.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let fn_output = match &input_fn.sig.output {
         syn::ReturnType::Default => quote!(()),
@@ -114,7 +116,7 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #input_fn
 
         #[allow(non_snake_case)]
-        pub fn #process_fn_name(#fn_args) -> Result<process_fun::ProcessWrapper<#fn_output>, process_fun::ProcessFunError> {
+        pub fn #process_fn_name #ty_generics(#fn_args) -> Result<process_fun::ProcessWrapper<#fn_output>, process_fun::ProcessFunError> #where_clause {
             // Create pipes for result and start time communication
             #[cfg(feature = "debug")]
             eprintln!("[process-fun-debug] Creating pipes for process function: {}", #fn_name_str);
@@ -169,11 +171,6 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
-
-    #[cfg(feature = "debug")]
-    {
-        dbg!(expanded.to_string());
-    }
 
     #[cfg(feature = "debug")]
     {

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - Fixed a timing bug in child creation. The child now uses `stat` to find its system start time to ensure correct termination on drop.
 - Turned off default debug feature.
+- Cleanup and support type parameters
 
 ## [0.1.1] - 2024-12-12
 
