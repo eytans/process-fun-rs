@@ -11,6 +11,7 @@ use nix::errno::Errno;
 use nix::fcntl::OFlag;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::{fork, pipe2, ForkResult, Pid};
+use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -78,7 +79,7 @@ where
 
         // Check if we already have a result
         if let Some(bytes) = self.result.lock().unwrap().take() {
-            return ser::from_slice(&bytes).map_err(ProcessFunError::SerError);
+            return ser::from_slice(&bytes).map_err(ProcessFunError::from);
         }
 
         // Read result from pipe
@@ -121,7 +122,7 @@ where
             Ok(_) => {
                 // Process completed within timeout
                 if let Some(bytes) = self.result.lock().unwrap().take() {
-                    return ser::from_slice(&bytes).map_err(ProcessFunError::SerError);
+                    return ser::from_slice(&bytes).map_err(ProcessFunError::from);
                 }
                 // This shouldn't happen as we got a completion signal
                 Err(ProcessFunError::ProcessError(
@@ -353,7 +354,7 @@ pub fn fork_process() -> Result<ForkResult, ProcessFunError> {
 pub type FunId = PathBuf;
 
 /// Errors that can occur during process-fun operations
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Serialize, Deserialize)]
 pub enum ProcessFunError {
     /// Multiple #[process] attributes were found on a single function.
     /// Only one #[process] attribute is allowed per function.
@@ -367,11 +368,11 @@ pub enum ProcessFunError {
 
     /// An I/O error occurred during process execution or file operations
     #[error("Failed to read or write file: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(String),
 
     /// Failed to parse Rust source code
     #[error("Failed to parse Rust file: {0}")]
-    ParseError(#[from] syn::Error),
+    ParseError(String),
 
     /// Error during process communication between parent and child processes
     #[error("Process communication error: {0}")]
@@ -379,9 +380,27 @@ pub enum ProcessFunError {
 
     /// serialization/deserialization error for function arguments or results
     #[error("Failed to serialize or deserialize: {0}")]
-    SerError(#[from] bincode::Error),
+    SerError(String),
 
     /// Process execution timed out
     #[error("Process execution timed out")]
     TimeoutError,
+}
+
+impl From<bincode::Error> for ProcessFunError {
+    fn from(err: bincode::Error) -> Self {
+        ProcessFunError::SerError(err.to_string())
+    }
+}
+
+impl From<std::io::Error> for ProcessFunError {
+    fn from(err: std::io::Error) -> Self {
+        ProcessFunError::IoError(err.to_string())
+    }
+}
+
+impl From<syn::Error> for ProcessFunError {
+    fn from(err: syn::Error) -> Self {
+        ProcessFunError::ParseError(err.to_string())
+    }
 }
