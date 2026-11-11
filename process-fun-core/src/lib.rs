@@ -10,8 +10,8 @@ use interprocess::unnamed_pipe::{Recver, Sender};
 use nix::errno::Errno;
 use nix::fcntl::OFlag;
 use nix::sys::signal::{self, Signal};
-use nix::sys::wait::waitpid;
-use nix::unistd::{fork, pipe2, ForkResult, Pid};
+use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+use nix::unistd::{fork, getpid, pipe2, ForkResult, Pid};
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
 use std::path::PathBuf;
@@ -46,6 +46,7 @@ pub mod ser {
 #[derive(Debug)]
 pub struct ProcessWrapper<T> {
     child_pid: Pid,
+    owner: Pid,
     start_time: Option<SystemTime>,
     receiver: Option<Recver>,
     result: Arc<Mutex<Option<Vec<u8>>>>,
@@ -67,6 +68,7 @@ where
     pub fn new(child_pid: Pid, receiver: Recver) -> Self {
         Self {
             child_pid,
+            owner: getpid(),
             start_time: None,
             receiver: Some(receiver),
             result: Arc::new(Mutex::new(None)),
@@ -158,7 +160,8 @@ pub fn stat_pid_start(pid: Pid) -> Result<SystemTime, ProcessFunError> {
 }
 
 impl<T> ProcessWrapper<T> {
-    /// The PID of the child process
+    /// The PID of the child process. Only meaningful until the handle is
+    /// dropped or aborted, after which the child has been reaped.
     pub fn pid(&self) -> Pid {
         self.child_pid
     }
@@ -181,84 +184,77 @@ impl<T> ProcessWrapper<T> {
         }
     }
 
-    /// Check if the process is still the same one we created
-    #[inline]
-    fn is_same_process(&mut self) -> bool {
-        if self.ensure_start_time().is_err() {
-            return false;
-        }
-        // Ensure we have the start time for validation
-        if let Some(start_time) = self.start_time {
-            stat_pid_start(self.child_pid)
-                .map(|stat| stat == start_time)
-                .unwrap_or(false)
-        } else {
-            false
-        }
-    }
-
-    #[inline]
-    fn kill(&mut self) -> Result<(), Errno> {
-        // Only kill if it's the same process we created
-        if self.is_same_process() {
-            match signal::kill(self.child_pid, Signal::SIGKILL) {
-                Ok(()) => Ok(()),
-                Err(Errno::ESRCH) => Ok(()), // Process already exited
-                Err(e) => Err(e),
-            }
-        } else {
-            Ok(()) // Different process with same PID, consider it "already killed"
-        }
-    }
-
-    /// Reap the child process so it does not linger as a zombie.
+    /// Kill and reap the child process, if it is still our unreaped child.
     ///
-    /// Blocks until the child has exited, so it should only be called after the
-    /// child was killed or is known to be finishing.
-    #[inline]
-    fn reap(&mut self) {
+    /// This never reads from the pipe and never waits on a process it did not
+    /// signal, so it cannot block on a wedged or misidentified child.
+    fn terminate(&mut self) -> Result<(), Errno> {
         if self.reaped {
-            return;
+            return Ok(());
         }
-        // Retry if interrupted by a signal. Any other error (e.g. ECHILD because the
-        // child was already reaped elsewhere) means there is nothing left to reap.
+
+        // Probe the child without blocking. Until we reap it, our child's PID
+        // cannot be reused by another process, so if waitpid reports it as still
+        // alive it is the process we created.
+        match waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG)) {
+            Ok(WaitStatus::StillAlive) => {}
+            // The child already exited and has now been reaped, or it is not our
+            // child anymore (e.g. it was reaped elsewhere): nothing left to do.
+            Ok(_) | Err(Errno::ECHILD) => {
+                self.reaped = true;
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        }
+
+        match signal::kill(self.child_pid, Signal::SIGKILL) {
+            Ok(()) | Err(Errno::ESRCH) => {}
+            Err(e) => return Err(e),
+        }
+
+        // The child was just sent SIGKILL, so this wait is short. Retry if
+        // interrupted by a signal; any other error means nothing is left to reap.
         while let Err(Errno::EINTR) = waitpid(self.child_pid, None) {}
         self.reaped = true;
+        Ok(())
     }
 
-    /// Abort the process
-    pub fn abort(&mut self) -> Result<(), ProcessFunError> {
-        // Kill before dropping the receiver: validating the process identity may
-        // require reading the start time from the pipe.
-        let kill_result = self.kill();
+    /// Whether this handle is owned by the current process. A forked child
+    /// inherits copies of its parent's handles (e.g. when a panic unwinds through
+    /// the caller's frames in the child); those copies must not touch the
+    /// parent's children.
+    #[inline]
+    fn is_owner(&self) -> bool {
+        getpid() == self.owner
+    }
 
+    /// Abort the process: kill it with SIGKILL and reap it.
+    ///
+    /// Blocks only until the killed child has been reaped.
+    pub fn abort(&mut self) -> Result<(), ProcessFunError> {
         // Take ownership of the receiver to ensure it's dropped
         let _ = self.receiver.take();
 
-        kill_result.map_err(|e| {
-            ProcessFunError::ProcessError(format!("Failed to send SIGKILL to process: {}", e))
-        })?;
-        self.reap();
-        Ok(())
+        if !self.is_owner() {
+            return Ok(());
+        }
+
+        self.terminate().map_err(|e| {
+            ProcessFunError::ProcessError(format!("Failed to terminate process: {}", e))
+        })
     }
 }
 
 impl<T> Drop for ProcessWrapper<T> {
     fn drop(&mut self) {
-        if self.reaped {
-            return;
-        }
-
-        // Attempt to kill the process if it's still running. This must happen before
-        // dropping the receiver, since validating the process identity may require
-        // reading the start time from the pipe.
-        let _ = self.kill();
-
         // Take ownership of the receiver to ensure it's dropped
         let _ = self.receiver.take();
 
-        // Wait for the child so it doesn't remain as a zombie process
-        self.reap();
+        if self.is_owner() {
+            // Kill the child if it is still running and reap it so it doesn't
+            // remain as a zombie process
+            let _ = self.terminate();
+        }
     }
 }
 

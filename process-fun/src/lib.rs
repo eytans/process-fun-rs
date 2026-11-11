@@ -273,4 +273,30 @@ mod tests {
         assert!(!process_exists(pid), "Child process {} was not reaped", pid);
         drop(process);
     }
+
+    #[test]
+    fn test_abort_fresh_process() {
+        let mut process = sleep_long_process().unwrap();
+        let pid = process.pid().as_raw();
+        let start = std::time::Instant::now();
+        process.abort().unwrap();
+        assert!(start.elapsed() < Duration::from_secs(10));
+        assert!(!process_exists(pid), "Child process {} was not reaped", pid);
+    }
+
+    #[process]
+    fn slow_value() -> i32 {
+        thread::sleep(Duration::from_millis(500));
+        7
+    }
+
+    #[test]
+    fn test_panicking_child_does_not_kill_siblings() {
+        let mut sibling = slow_value_process().unwrap();
+        // The panic unwinds through this frame inside the forked child, dropping
+        // its inherited copy of `sibling`; that must not kill the real sibling.
+        let result = panicking_function_process().unwrap().wait();
+        assert!(result.is_err());
+        assert_eq!(sibling.wait().unwrap(), 7);
+    }
 }
