@@ -10,6 +10,7 @@ use interprocess::unnamed_pipe::{Recver, Sender};
 use nix::errno::Errno;
 use nix::fcntl::OFlag;
 use nix::sys::signal::{self, Signal};
+use nix::sys::wait::waitpid;
 use nix::unistd::{fork, pipe2, ForkResult, Pid};
 use serde::{Deserialize, Serialize};
 use std::io::prelude::*;
@@ -48,6 +49,7 @@ pub struct ProcessWrapper<T> {
     start_time: Option<SystemTime>,
     receiver: Option<Recver>,
     result: Arc<Mutex<Option<Vec<u8>>>>,
+    reaped: bool,
     _ghost: std::marker::PhantomData<T>,
 }
 
@@ -68,6 +70,7 @@ where
             start_time: None,
             receiver: Some(receiver),
             result: Arc::new(Mutex::new(None)),
+            reaped: false,
             _ghost: std::marker::PhantomData,
         }
     }
@@ -155,6 +158,11 @@ pub fn stat_pid_start(pid: Pid) -> Result<SystemTime, ProcessFunError> {
 }
 
 impl<T> ProcessWrapper<T> {
+    /// The PID of the child process
+    pub fn pid(&self) -> Pid {
+        self.child_pid
+    }
+
     /// Lazily read the start time from pipe if not already read
     #[inline]
     fn ensure_start_time(&mut self) -> Result<(), ProcessFunError> {
@@ -203,25 +211,54 @@ impl<T> ProcessWrapper<T> {
         }
     }
 
+    /// Reap the child process so it does not linger as a zombie.
+    ///
+    /// Blocks until the child has exited, so it should only be called after the
+    /// child was killed or is known to be finishing.
+    #[inline]
+    fn reap(&mut self) {
+        if self.reaped {
+            return;
+        }
+        // Retry if interrupted by a signal. Any other error (e.g. ECHILD because the
+        // child was already reaped elsewhere) means there is nothing left to reap.
+        while let Err(Errno::EINTR) = waitpid(self.child_pid, None) {}
+        self.reaped = true;
+    }
+
     /// Abort the process
     pub fn abort(&mut self) -> Result<(), ProcessFunError> {
+        // Kill before dropping the receiver: validating the process identity may
+        // require reading the start time from the pipe.
+        let kill_result = self.kill();
+
         // Take ownership of the receiver to ensure it's dropped
         let _ = self.receiver.take();
 
-        self.kill().map_err(|e| {
+        kill_result.map_err(|e| {
             ProcessFunError::ProcessError(format!("Failed to send SIGKILL to process: {}", e))
         })?;
+        self.reap();
         Ok(())
     }
 }
 
 impl<T> Drop for ProcessWrapper<T> {
     fn drop(&mut self) {
+        if self.reaped {
+            return;
+        }
+
+        // Attempt to kill the process if it's still running. This must happen before
+        // dropping the receiver, since validating the process identity may require
+        // reading the start time from the pipe.
+        let _ = self.kill();
+
         // Take ownership of the receiver to ensure it's dropped
         let _ = self.receiver.take();
 
-        // Attempt to kill the process if it's still running
-        let _ = self.kill();
+        // Wait for the child so it doesn't remain as a zombie process
+        self.reap();
     }
 }
 

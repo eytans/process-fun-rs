@@ -232,4 +232,45 @@ mod tests {
         let expected = long_calculation(iterations);
         assert_eq!(result.unwrap(), expected);
     }
+
+    fn process_exists(pid: i32) -> bool {
+        std::path::Path::new(&format!("/proc/{}", pid)).exists()
+    }
+
+    #[process]
+    fn sleep_long() -> i32 {
+        thread::sleep(Duration::from_secs(30));
+        1
+    }
+
+    #[test]
+    fn test_drop_reaps_running_process() {
+        let process = sleep_long_process().unwrap();
+        let pid = process.pid().as_raw();
+        let start = std::time::Instant::now();
+        drop(process);
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "Drop should kill the child rather than wait for it to finish"
+        );
+        assert!(!process_exists(pid), "Child process {} was not reaped", pid);
+    }
+
+    #[test]
+    fn test_drop_reaps_finished_process() {
+        let mut process = add_points_process(Point { x: 1, y: 2 }, Point { x: 3, y: 4 }).unwrap();
+        let pid = process.pid().as_raw();
+        process.wait().unwrap();
+        drop(process);
+        assert!(!process_exists(pid), "Child process {} was not reaped", pid);
+    }
+
+    #[test]
+    fn test_timeout_reaps_process() {
+        let mut process = sleep_long_process().unwrap();
+        let pid = process.pid().as_raw();
+        assert!(process.timeout(Duration::from_millis(100)).is_err());
+        assert!(!process_exists(pid), "Child process {} was not reaped", pid);
+        drop(process);
+    }
 }
