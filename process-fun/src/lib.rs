@@ -299,4 +299,16 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(sibling.wait().unwrap(), 7);
     }
+
+    #[test]
+    fn test_abort_after_external_reap() {
+        let mut process = slow_value_process().unwrap();
+        assert_eq!(process.wait().unwrap(), 7);
+        // Someone else reaps the child first
+        let _ = sys::waitpid(process.pid(), None);
+        let start = std::time::Instant::now();
+        process.abort().unwrap();
+        process.abort().unwrap();
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
 }

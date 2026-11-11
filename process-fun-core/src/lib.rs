@@ -187,23 +187,31 @@ impl<T> ProcessWrapper<T> {
     /// Kill and reap the child process, if it is still our unreaped child.
     ///
     /// This never reads from the pipe and never waits on a process it did not
-    /// signal, so it cannot block on a wedged or misidentified child.
+    /// signal, so Drop and `abort()` cannot block on a wedged or misidentified
+    /// child (beyond the brief wait for a SIGKILLed child to be reaped).
     fn terminate(&mut self) -> Result<(), Errno> {
         if self.reaped {
             return Ok(());
         }
 
-        // Probe the child without blocking. Until we reap it, our child's PID
+        // Probe the child without blocking. Until it is reaped, our child's PID
         // cannot be reused by another process, so if waitpid reports it as still
-        // alive it is the process we created.
+        // running it is the process we created. This assumes nothing else in the
+        // program reaps our children (e.g. a `waitpid(-1)` loop, a SIGCHLD handler,
+        // or SIGCHLD set to SIG_IGN); if something does, a long-lived handle could
+        // in principle target a recycled PID.
         match waitpid(self.child_pid, Some(WaitPidFlag::WNOHANG)) {
-            Ok(WaitStatus::StillAlive) => {}
-            // The child already exited and has now been reaped, or it is not our
-            // child anymore (e.g. it was reaped elsewhere): nothing left to do.
-            Ok(_) | Err(Errno::ECHILD) => {
+            // The child already terminated and has now been reaped, or it is not our
+            // child anymore (e.g. reaped elsewhere, or this is a forked copy of the
+            // handle). EINVAL means the child was reaped but nix could not decode its
+            // status (e.g. killed by a real-time signal).
+            Ok(WaitStatus::Exited(..) | WaitStatus::Signaled(..))
+            | Err(Errno::ECHILD | Errno::EINVAL) => {
                 self.reaped = true;
                 return Ok(());
             }
+            // Still running, or a non-terminal status such as a ptrace stop
+            Ok(_) => {}
             Err(e) => return Err(e),
         }
 
@@ -212,9 +220,16 @@ impl<T> ProcessWrapper<T> {
             Err(e) => return Err(e),
         }
 
-        // The child was just sent SIGKILL, so this wait is short. Retry if
-        // interrupted by a signal; any other error means nothing is left to reap.
-        while let Err(Errno::EINTR) = waitpid(self.child_pid, None) {}
+        // The child was just sent SIGKILL, so this wait is short. Keep waiting
+        // through signal interruptions and non-terminal statuses; any other error
+        // means nothing is left to reap.
+        loop {
+            match waitpid(self.child_pid, None) {
+                Ok(WaitStatus::Exited(..) | WaitStatus::Signaled(..)) => break,
+                Ok(_) | Err(Errno::EINTR) => continue,
+                Err(_) => break,
+            }
+        }
         self.reaped = true;
         Ok(())
     }
@@ -222,7 +237,8 @@ impl<T> ProcessWrapper<T> {
     /// Whether this handle is owned by the current process. A forked child
     /// inherits copies of its parent's handles (e.g. when a panic unwinds through
     /// the caller's frames in the child); those copies must not touch the
-    /// parent's children.
+    /// parent's children. `waitpid` on a non-child already returns ECHILD, so this
+    /// is a second line of defense that also skips the syscalls entirely.
     #[inline]
     fn is_owner(&self) -> bool {
         getpid() == self.owner
