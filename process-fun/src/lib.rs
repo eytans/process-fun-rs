@@ -311,4 +311,70 @@ mod tests {
         process.abort().unwrap();
         assert!(start.elapsed() < Duration::from_secs(1));
     }
+
+    #[test]
+    fn test_panicking_child_does_not_continue_as_parent() {
+        let parent = std::process::id();
+        let marker = std::env::temp_dir().join(format!("process-fun-escaped-{}", parent));
+        let _ = fs::remove_file(&marker);
+
+        // catch_unwind stands in for any caller that recovers from panics: without
+        // the fix, the child's panic would unwind to here and resume the caller.
+        let result = std::panic::catch_unwind(|| {
+            let mut process = panicking_function_process().unwrap();
+            let r = process.wait();
+            // Dropping the handle would SIGKILL an escaped child before it can write
+            // the marker, hiding the bug
+            std::mem::forget(process);
+            r
+        });
+
+        if std::process::id() != parent {
+            // Only reachable if the panicking child unwound back into this test
+            let _ = fs::write(&marker, "child escaped");
+            std::process::exit(0);
+        }
+
+        assert!(
+            matches!(result, Ok(Err(_))),
+            "Expected the parent to get an error result"
+        );
+        // Give an escaped child time to reach the code above
+        thread::sleep(Duration::from_millis(500));
+        let escaped = marker.exists();
+        let _ = fs::remove_file(&marker);
+        assert!(
+            !escaped,
+            "Panicking child continued running the caller's code"
+        );
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct RemovesFileOnDrop {
+        path: std::path::PathBuf,
+    }
+
+    impl Drop for RemovesFileOnDrop {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    #[process]
+    fn create_file_handle(path: std::path::PathBuf) -> RemovesFileOnDrop {
+        fs::write(&path, "data").unwrap();
+        RemovesFileOnDrop { path }
+    }
+
+    #[test]
+    fn test_result_not_dropped_in_child() {
+        let path = std::env::temp_dir().join(format!("process-fun-drop-{}", std::process::id()));
+        let handle = create_file_handle_process(path.clone())
+            .unwrap()
+            .wait()
+            .unwrap();
+        assert!(path.exists(), "Child dropped the returned value");
+        drop(handle);
+        assert!(!path.exists());
+    }
 }
