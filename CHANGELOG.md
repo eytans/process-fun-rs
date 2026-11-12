@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - Child processes are now reaped (`waitpid`) on drop and on `abort()`, so they no longer linger as zombies (#1).
 - Dropping or aborting a handle before `wait()`/`timeout()` now actually kills the child.
+- A forked child now always exits, even if the function panics or an internal error occurs; previously it could unwind or return into the caller's code and keep running as a copy of the parent.
 - Added `ProcessWrapper::pid()`.
 
 ## [0.1.2] - 2024-12-13

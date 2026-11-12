@@ -138,35 +138,52 @@ pub fn process(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     // Child process - close read ends immediately
                     std::mem::drop(read_pipe);
 
-                    #[cfg(feature = "debug")]
-                    eprintln!("[process-fun-debug] Child process started");
+                    // Run everything in the child inside catch_unwind and always exit
+                    // afterwards: a panic or an early `?` return must never unwind or
+                    // return into the caller's code, which would leave the child running
+                    // on as a copy of the parent.
+                    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                        move || -> Result<(), process_fun::ProcessFunError> {
+                            #[cfg(feature = "debug")]
+                            eprintln!("[process-fun-debug] Child process started");
 
-                    // Get and send start time by stating the child process
-                    let pid = process_fun::sys::getpid();
-                    let start_time = process_fun::stat_pid_start(pid)?;
-                    process_fun::write_time(&mut write_pipe, start_time)?;
+                            // Get and send start time by stating the child process
+                            let pid = process_fun::sys::getpid();
+                            let start_time = process_fun::stat_pid_start(pid)?;
+                            process_fun::write_time(&mut write_pipe, start_time)?;
 
-                    #[cfg(feature = "debug")]
-                    {
-                        eprintln!("[process-fun-debug] Processing function: {}", &#fn_name_str);
-                        eprintln!("[process-fun-debug] Arguments tuple type: {}", stringify!(#args_types_tuple));
-                    }
+                            #[cfg(feature = "debug")]
+                            {
+                                eprintln!("[process-fun-debug] Processing function: {}", &#fn_name_str);
+                                eprintln!("[process-fun-debug] Arguments tuple type: {}", stringify!(#args_types_tuple));
+                            }
 
-                    // Execute the function with the original arguments
-                    let result = #call;
+                            // Execute the function with the original arguments
+                            let result = #call;
 
-                    #[cfg(feature = "debug")]
-                    eprintln!("[process-fun-debug] Child process result: {:?}", &result);
+                            #[cfg(feature = "debug")]
+                            eprintln!("[process-fun-debug] Child process result: {:?}", &result);
 
-                    // Serialize and write result
-                    let result_bytes = process_fun::ser::to_vec(&result)?;
-                    process_fun::write_to_pipe(write_pipe, &result_bytes)?;
+                            // Serialize and write result
+                            let result_bytes = process_fun::ser::to_vec(&result);
+                            // The value now belongs to the parent: don't run its Drop in
+                            // the child, matching the previous behaviour where exit()
+                            // skipped it.
+                            let _ = std::mem::ManuallyDrop::new(result);
+                            process_fun::write_to_pipe(write_pipe, &result_bytes?)?;
 
-                    #[cfg(feature = "debug")]
-                    eprintln!("[process-fun-debug] Child process completed");
+                            #[cfg(feature = "debug")]
+                            eprintln!("[process-fun-debug] Child process completed");
+                            Ok(())
+                        },
+                    ));
 
-                    // Exit child process
-                    std::process::exit(0);
+                    // Exit child process; a non-zero code signals a panic or error
+                    let code = match outcome {
+                        Ok(Ok(())) => 0,
+                        _ => 1,
+                    };
+                    std::process::exit(code);
                 }
             }
         }
