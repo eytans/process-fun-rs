@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.1.3] - 2026-11-12
 
 - Child processes are now reaped (`waitpid`) on drop and on `abort()`, so they no longer linger as zombies (#1).
 - Dropping or aborting a handle before `wait()`/`timeout()` now actually kills the child.

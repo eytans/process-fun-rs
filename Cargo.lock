@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "process-fun"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "interprocess",
  "log",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "process-fun-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "bincode",
  "interprocess",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "process-fun-macro"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "prettyplease",
  "proc-macro-error",
