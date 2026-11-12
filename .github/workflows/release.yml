@@ -1,0 +1,90 @@
+name: Release
+
+# Publishes all workspace crates to crates.io when a version tag (e.g. v0.1.3)
+# is pushed, then creates a GitHub release from the CHANGELOG section.
+# Running it manually only performs the checks and a publish dry run.
+# See RELEASING.md.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to check, e.g. 0.1.3 (dry run only, nothing is published)"
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check versions and changelog
+        run: scripts/check-release.sh "$VERSION"
+        env:
+          VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Publish dry run
+        run: scripts/publish.sh --dry-run
+
+  publish:
+    name: Publish
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # crates.io trusted publishing
+    env:
+      HAS_TOKEN_SECRET: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Without a CARGO_REGISTRY_TOKEN secret, get a short-lived token through
+      # crates.io trusted publishing (must be configured on crates.io).
+      - name: Authenticate with crates.io
+        id: auth
+        if: env.HAS_TOKEN_SECRET != 'true'
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish to crates.io
+        run: scripts/publish.sh
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Create GitHub release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists, skipping"
+            exit 0
+          fi
+          scripts/release-notes.sh "$GITHUB_REF_NAME" > release-notes.md
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
